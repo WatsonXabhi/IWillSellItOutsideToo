@@ -21,7 +21,7 @@ jobs:
           WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
-          DIFF=$(git diff HEAD~1)
+          DIFF=$(git diff HEAD)
           curl -X POST \
             -H "Authorization: Bearer $WATSONX_API_KEY" \
             -H "Content-Type: application/json" \
