@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Code (fetch 2 commits)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Send Main Branch Diff to WatsonX
         env:
