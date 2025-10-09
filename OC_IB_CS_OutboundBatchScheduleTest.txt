@@ -1,0 +1,43 @@
+/**
+* @File Name          : OC_IB_CS_OutboundBatchScheduleTest
+* @Description        : Test class for OC_IB_CS_OutboundBatchSchedule
+* @Author             : IBM
+* @Group              : OmniChannel - Service
+* @Release            : R2210
+* @Created Date       : 15th Sep 2022
+* @Modification Log   : 
+*==============================================================================
+* Ver         Date                     Author                Modification
+*==============================================================================
+* 1.0        2022-09-15                 IBM                   U-5277 Initial Version
+**/
+@istest 
+public class OC_IB_CS_OutboundBatchScheduleTest {
+static testmethod void schedulerMethod(){
+        Test.startTest();
+    	OC_TestDataGenerator.insertIntegrationRecords();
+    	// Create a valid CRON expression: 03:30 AM daily
+        String cronExp = '0 30 3 * * ? *';
+
+        // Schedule the job
+        String jobId2 = System.schedule(OC_IB_Constants.Customer_Solution_Outbound_Scheduler, cronExp, new OC_IB_CS_OutboundBatchSchedule());
+        OC_IB_CS_OutboundBatchSchedule batchScheduler=new OC_IB_CS_OutboundBatchSchedule();
+        //Added for U-5499 - start
+        String scheduleTime = '0 0 * * * ?';
+        String jobId = System.schedule('CS12HrOutboundScheduler', scheduleTime, batchScheduler);
+        CronTrigger ct = [ SELECT Id, CronExpression, TimesTriggered, NextFireTime FROM CronTrigger WHERE id = :jobId];
+        System.assertEquals(scheduleTime, ct.CronExpression, 'OC_IB_CS_OutboundBatchSchedule is not scheduled');
+        //Added for U-5499 - end
+        Test.stopTest();
+    } 
+
+    //Added for U-5499 - start
+    static testmethod void setFieldValueNewTest()
+    {
+        Test.startTest();
+        OC_IB_Utility.setFieldvalue('Sfdc_Ebip_IBCustomerSolution_outApi','FromDateTime', true);
+        OC_IB_Utility.setFieldvalue('Sfdc_Ebip_IBCustomerSolution_outApi','ToDateTime', true);
+        Test.stopTest();
+    }
+    //Added for U-5499 - end
+}
