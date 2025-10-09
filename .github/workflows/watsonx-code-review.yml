@@ -46,12 +46,15 @@ jobs:
 
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: WatsonXabhi/IWillSellItOutsideToo
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            WatsonX Code Review Results:
-            ```json
-            $(cat review.json)
-            ```
+          with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: WatsonXabhi/IWillSellItOutsideToo
+        issue-number: ${{ github.event.pull_request.number }}
+        body: |
+          WatsonX Code Review Results:
+          ```json
+          $(cat review.json)
+          ```
+        edit-mode: append
+        append-separator: newline
+        reactions-edit-mode: append
