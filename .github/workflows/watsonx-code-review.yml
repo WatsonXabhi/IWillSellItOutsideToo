@@ -37,6 +37,6 @@ jobs:
           issue-number: 1
           body: |
             💡 **WatsonX Code Review Results (main branch):**
-            ```json
-            ${{ steps.watsonx.outputs.review_output }}
+            ```
+            $(cat review.json)
             ```
