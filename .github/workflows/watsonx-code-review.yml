@@ -32,7 +32,7 @@ jobs:
       - name: Read WatsonX Review Output
         id: read_review
         run: |
-          CONTENT=$(cat review.json)
+          CONTENT=$(cat review.json | sed ':a;N;$!ba;s/\n/\\n/g')  # flatten multiline JSON
           echo "review=$CONTENT" >> $GITHUB_OUTPUT
 
       - name: Post WatsonX Review Comment
