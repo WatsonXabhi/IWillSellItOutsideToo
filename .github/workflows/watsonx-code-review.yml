@@ -1,43 +1,27 @@
-# This is a basic workflow to help you get started with Actions
-
 name: WatsonX Code Review
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   watsonx-review:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Get Changed Files
-        id: files
-        run: |
-          echo "::set-output name=changed::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | tr '\n' ',')"
 
       - name: Send PR Diff to WatsonX
         env:
           WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
-          DIFF=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          DIFF=$(git diff HEAD~1)
           curl -X POST \
             -H "Authorization: Bearer $WATSONX_API_KEY" \
             -H "Content-Type: application/json" \
@@ -55,6 +39,6 @@ jobs:
             ```json
             $(cat review.json)
             ```
-            edit-mode: append
-            append-separator: newline
-            reactions-edit-mode: append
+          edit-mode: append
+          append-separator: newline
+          reactions-edit-mode: append
