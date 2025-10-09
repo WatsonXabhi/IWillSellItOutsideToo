@@ -4,7 +4,7 @@ public class SampleApexClass {
         try {
             // Issue 2: Potential null pointer exception
             String leadName = lead.getName();
-            System.debug('Lead Name: 8' + leadName);
+            System.debug('Lead Name: 9' + leadName);
         } catch (Exception e) {
             // Issue 3: Swallowing exception without logging or handling
         }
