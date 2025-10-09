@@ -1,0 +1,255 @@
+public class OC_ESR_StagingToActualHandler {
+    public static List<EventLog.integrationEventLog> integEventLogInsertList = new List<EventLog.integrationEventLog>();
+    public static String errorStagingRecordId;
+    public static OC_IB_IntegrationSobjectRecords__c errorStagingrecord;
+    public static Map<String, Id> mapStagingFieldValueToSfId = new Map<String, Id>();
+    public static Map<String, OC_IB_IntegrationSobjectRecords__c> invalidCustNotFound = new Map<String, OC_IB_IntegrationSobjectRecords__c>();
+    public static List<EventLog.integrationEventLog> listCustNotFoundEventLog = new List<EventLog.integrationEventLog>();
+    public static Map<String, OC_IB_IntegrationSobjectRecords__c> invalidPA = new Map<String, OC_IB_IntegrationSobjectRecords__c>();
+    public static List<EventLog.integrationEventLog> productAttributeNotFoundEventLog = new List<EventLog.integrationEventLog>();
+
+    /**
+     * @Method Name : CopyESRStagingToActualObject
+     * @Description : upserts the staging object records into ESR
+     * @Return : void
+     */
+    public static void CopyESRFromStagingToActualObject(String integrationIdentifier, List<OC_IB_IntegrationSobjectRecords__c> stagedRecList) {
+        String objectName;
+        List<SObject> eSRDataList = new List<SObject>();
+        Set<String> esrCustomers = new Set<String>();
+        List<Id> esrCustomerIds = new List<Id>();
+        Database.UpsertResult[] dmlResultESRList;
+        String externalId = '';
+        String esrProductAttribute = '';
+        Map<Id, Id> productIDsMap = new Map<Id, Id>();
+        List<OC_IB_InboundIntegrationFieldMapping__mdt> inboundFieldMappingMdtRecordList;
+        List<OC_MD_ESR__c> esrRecList = new List<OC_MD_ESR__c>();
+        List<EventLog.integrationEventLog> integEventLogEsr = new List<EventLog.integrationEventLog>();
+        Set<String> productNames = new Set<String>(); // product
+        Set<String> productAttributeNames = new Set<String>(); // ProductAttribute
+        Set<String> technologyIds = new Set<String>(); // Technology
+        Map<String, Id> esrIdToProductIdMap = new Map<String, Id>(); // customer ID to product ID map
+        Map<String, Id> esrToProductAttrIdMap = new Map<String, Id>(); // customer ID to ProductAttribute map
+        Map<String, Id> esrToTechnologyIdMap = new Map<String, Id>(); // customer ID to technology map
+
+        try {
+            mapStagingFieldValueToSfId = OC_IB_Utility.getServiceAccS2PIdToAccIdMapping();
+            Map<String, OC_IB_InboundIntegrationFieldMapping__mdt> mapActualobjFieldToMdtRec = new Map<String, OC_IB_InboundIntegrationFieldMapping__mdt>();
+            inboundFieldMappingMdtRecordList = OC_IB_Utility.getInboundIntegrationFieldMappingMdtRecords(integrationIdentifier);
+            objectName = inboundFieldMappingMdtRecordList[0].OC_IB_SfdcObjectApiName__c;
+
+            if (inboundFieldMappingMdtRecordList != null && !inboundFieldMappingMdtRecordList.isEmpty()) {
+                System.debug('inboundfieldmap2->' + inboundFieldMappingMdtRecordList);
+                mapActualobjFieldToMdtRec = OC_IB_Utility.getActualobjFieldToMdtRecMapping(inboundFieldMappingMdtRecordList);
+                System.debug('check mapActualobjFieldToMdtRec ->' + mapActualobjFieldToMdtRec);
+
+                for (OC_IB_IntegrationSobjectRecords__c stagedRec : stagedRecList) {
+                    System.debug('check staged rec list for esr' + stagedRec);
+                    errorStagingRecordId = stagedRec.Id;
+                    errorStagingrecord = stagedRec;
+                    SObject sObjRec = Schema.getGlobalDescribe().get(objectName).newSObject();
+                    System.debug('sObjRec->' + sObjRec);
+
+                    if (stagedRec.OC_PRD_Customers__c != null) {
+                        List<Object> customerValues = (List<Object>) JSON.deserializeUntyped(stagedRec.OC_PRD_Customers__c);
+                        esrCustomers = new Set<String>();
+                        for (Object cust : customerValues) {
+                            esrCustomers.add(String.valueOf(cust));
+                        }
+                        System.debug('Customers: ' + esrCustomers);
+                    }
+
+                    for (String customer : esrCustomers) {
+                        String recordTypeName = stagedRec.OC_MD_ProductRecordType__c;
+                        System.debug('@@recordTypeName' + recordTypeName);
+                        Id recordTypeId = Schema.SObjectType.Product2.getRecordTypeInfosByName().get(recordTypeName).getRecordTypeId();
+                        System.debug('@@recordTypeId' + recordTypeId);
+                        esrProductAttribute = stagedRec.OC_PRD_Release_Name__c + '+' + stagedRec.OC_PRD_Product_PlatformName__c;
+                        System.debug('@@esrProductAttribute' + esrProductAttribute);
+
+                        //Product Lookup start
+                        String productName = stagedRec.OC_MD_Product__c + '+' + recordTypeId;
+                        productNames.add(productName);
+                        System.debug('productNames' + JSON.serializePretty(productNames));
+
+                        /*if (!productNames.isEmpty()) {
+                            for (Product2 product : [SELECT Id FROM Product2 WHERE OC_PRD_TechProductNameRecordTypeId__c = :productNames]) {
+                                esrIdToProductIdMap.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, product.Id);
+                                System.debug('esrIdToProductIdMap' + JSON.serializePretty(esrIdToProductIdMap));
+                            }
+                        }*/
+                        //Product Lookup end
+
+                        //ProductAttribute Lookup start
+                        if (stagedRec.OC_MD_ProductRecordType__c == OC_IB_Constants.solutionRtName || stagedRec.OC_MD_ProductRecordType__c == OC_IB_Constants.nodeCompRtName) {
+                            String productAttributeName = stagedRec.OC_MD_Product__c + '+' + stagedRec.OC_PRD_Release_Name__c + '+' + recordTypeId;
+                            productAttributeNames.add(productAttributeName);
+                            System.debug('productAttributeName for solution' + JSON.serializePretty(productAttributeNames));
+
+                            if (!productAttributeNames.isEmpty()) {
+                                for (OC_MD_ProductAttributes__c productAttr : [SELECT Id FROM OC_MD_ProductAttributes__c WHERE OC_PRD_TechProductRelease__c = :productAttributeName]) {
+                                    esrToProductAttrIdMap.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, productAttr.Id);
+                                    System.debug('esrToProductAttrIdMap' + JSON.serializePretty(esrToProductAttrIdMap));
+                                }
+                            }
+                        } else if (stagedRec.OC_MD_ProductRecordType__c == 'Node Type') {
+                            String productAttributeName = stagedRec.OC_MD_Product__c + '+' + esrProductAttribute + '+' + recordTypeId;
+                            system.debug('print prdattr name ->' + productAttributeName);
+                            productAttributeNames.add(productAttributeName);
+                            System.debug('productAttributeName for node' + JSON.serializePretty(productAttributeNames));
+
+                            if (!productAttributeNames.isEmpty()) {
+                                for (OC_MD_ProductAttributes__c productAttr : [SELECT Id FROM OC_MD_ProductAttributes__c WHERE OC_PRD_TechProductRelease__c = :productAttributeName]) {
+                                    esrToProductAttrIdMap.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, productAttr.Id);
+                                    System.debug('esrToProductAttrIdMap' + JSON.serializePretty(esrToProductAttrIdMap));
+                                }
+                            }
+                        }
+
+                        //Technology Lookup start
+                        if (stagedRec.OC_MD_ProductRecordType__c == 'Node Type') {
+                            String ptechnologyExtId = stagedRec.OC_MD_Product__c + '+' + esrProductAttribute + '+' + stagedRec.OC_PRD_Technology__c + '+' + recordTypeId;
+                            system.debug('print ptechnologyExtId' + ptechnologyExtId);
+                            technologyIds.add(ptechnologyExtId);
+                            System.debug('ptechnologyExtId for node' + JSON.serializePretty(technologyIds));
+
+                            if (!technologyIds.isEmpty()) {
+                                for (OC_MD_Product_Relation__c tech : [SELECT Id FROM OC_MD_Product_Relation__c WHERE OC_PRD_TechPrdRelTechId__c = :ptechnologyExtId]) {
+                                    esrToTechnologyIdMap.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, tech.Id);
+                                    System.debug('esrToTechnologyIdMap' + JSON.serializePretty(esrToTechnologyIdMap));
+                                }
+                            }
+                        }
+
+                        String CustID = customer.deleteWhitespace();
+                        System.debug('customer --->' + CustID);
+                        String esrNumber = stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c;
+                        esrProductAttribute = stagedRec.OC_PRD_Release_Name__c + '+' + stagedRec.OC_PRD_Product_PlatformName__c;
+                        System.debug('@@esrProductAttribute' + esrProductAttribute);
+
+                        if (mapStagingFieldValueToSfId.containsKey(CustID)) {
+                            esrCustomerIds.add(mapStagingFieldValueToSfId.get(CustID));
+                            Id acctId = mapStagingFieldValueToSfId.get(CustID);
+                            System.debug('Account -->' + acctId);
+                            sObjRec = Schema.getGlobalDescribe().get(objectName).newSObject();
+
+                            String serviceToId = '';
+                            externalId = '';
+                            Id technologyId = esrToTechnologyIdMap.get(esrNumber);
+                            Id productId = esrIdToProductIdMap.get(esrNumber);
+                            if (!esrToProductAttrIdMap.isEmpty()) {
+                                Id productAttrId = esrToProductAttrIdMap.get(esrNumber);
+                                sObjRec.put('OC_MD_ProductAttribute__c', productAttrId);
+                                System.debug('prodAttr lookup ---> ' + productAttrId);
+                            } else {
+                                invalidPA.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, new OC_IB_IntegrationSobjectRecords__c(id = stagedRec.id, OC_IB_ActualObjectSyncStatus__c = OC_IB_Constants.syncErrorStatus));
+
+                                system.debug('print invalid customers list' + JSON.serializePretty(invalidPA));
+
+                                productAttributeNotFoundEventLog.add(new EventLog.integrationLog(OC_IB_Constants.logTypeError, OC_IB_Constants.classESRstagedObjToActualObjMapingHandler,
+
+                                        OC_IB_Constants.methodCopyESRStagingToActualObject, null, true, null, OC_IB_Constants.Sfdc_Ebip_ESR_inApi,
+
+                                        null, false, true, false, true, false, String.valueOf(stagedRec.id), 'Invalid ProductAttribute: ' + esrProductAttribute, false, null, null));
+
+                                system.debug('print productAttributeNotFoundEventLog' + JSON.serializePretty(productAttributeNotFoundEventLog));
+
+                            }
+
+                            integEventLogInsertList.addAll(productAttributeNotFoundEventLog);
+
+                            EventLog.createIntegrationLog(integEventLogInsertList);
+
+                            System.debug('here line 83 for sobj -->' + sObjRec);
+                            sObjRec.put('OC_MD_ESR_Decision__c', String.valueOf(stagedRec.OC_MD_ESR_Decision__c));
+                            sObjRec.put(OC_IB_Constants.ESR_NUMBER_ACTUAL, (stagedRec.get(OC_IB_Constants.Name)));
+                            sObjRec.put('OC_MD_Limitaton_Text__c', String.valueOf(stagedRec.OC_MD_Limitaton_Text__c));
+                            sObjRec.put('OC_MD_Exemption_Start_Date__c', Date.valueOf(stagedRec.OC_MD_Exemption_Start_Date__c));
+                            sObjRec.put('OC_MD_Exemption_End_Date__c', Date.valueOf(stagedRec.OC_MD_Exemption_End_Date__c));
+                            sObjRec.put('OC_ESR_Last_Modified_Date__c', Date.valueOf(stagedRec.OC_ESR_Last_Modified_Date__c));
+                            sObjRec.put('OC_MD_Platform__c', String.valueOf(stagedRec.OC_PRD_Product_PlatformName__c));
+                            sObjRec.put('OC_MD_Product__c', productId);
+                            System.debug('prod lookup ---> ' + productId);
+                            sObjRec.put('OC_MD_Technology__c', technologyId);
+                            System.debug('tech lookup ---> ' + technologyId);
+                            sObjRec.put('OC_MD_Account__c', acctId);
+                            externalId = String.valueOf(stagedRec.get(OC_IB_Constants.Name)) + '+' + CustID + '+' + stagedRec.OC_MD_Product__c + '+' + esrProductAttribute + '+' + stagedRec.OC_PRD_Technology__c + '+' + recordTypeId;
+                            sObjRec.put('OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c', externalId);
+                            System.debug('external id formed is -->' + externalId);
+
+                            eSRDataList.add(sObjRec);
+                        } else {
+
+                            invalidCustNotFound.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, new OC_IB_IntegrationSobjectRecords__c(id = stagedRec.id, OC_IB_ActualObjectSyncStatus__c = OC_IB_Constants.syncErrorStatus));
+
+                            system.debug('print invalid customers list' + JSON.serializePretty(invalidCustNotFound));
+
+                            listCustNotFoundEventLog.add(new EventLog.integrationLog(OC_IB_Constants.logTypeError, OC_IB_Constants.classESRstagedObjToActualObjMapingHandler,
+
+                                    OC_IB_Constants.methodCopyESRStagingToActualObject, null, true, null, OC_IB_Constants.Sfdc_Ebip_ESR_inApi,
+
+                                    null, false, true, false, true, false, String.valueOf(stagedRec.id), OC_IB_Constants.ESRCustomerError + CustID, false, null, null));
+
+                            system.debug('print listCustNotFoundEventLog' + JSON.serializePretty(listCustNotFoundEventLog));
+
+                        }
+
+                        integEventLogInsertList.addAll(listCustNotFoundEventLog);
+
+                        EventLog.createIntegrationLog(integEventLogInsertList);
+                    }
+                    System.debug('check 5 fields in SOBJREC' + JSON.serializePretty(sObjRec));
+                }
+
+                if (!productNames.isEmpty()) {
+                    List<Product2> products = [SELECT Id FROM Product2 WHERE OC_PRD_TechProductNameRecordTypeId__c IN: productNames];
+                    Map<String, String> prodNameRecTypeIdVsProductId = new Map<String, String>();
+                    for (Product2 product :products) {
+                        prodNameRecTypeIdVsProductId.put(OC_PRD_TechProductNameRecordTypeId__c, product.Id);
+                    }
+                }
+
+                
+                for(OC_IB_IntegrationSobjectRecords__c stagedRec : stagedRecList){
+                    String recordTypeName = stagedRec.OC_MD_ProductRecordType__c;
+                    System.debug('@@recordTypeName' + recordTypeName);
+                    Id recordTypeId = Schema.SObjectType.Product2.getRecordTypeInfosByName().get(recordTypeName).getRecordTypeId();
+                    esrIdToProductIdMap.put(stagedRec.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, prodNameRecTypeIdVsProductId.get(stagedRec.OC_MD_Product__c + '+' + recordTypeId));
+                    System.debug('esrIdToProductIdMap' + JSON.serializePretty(esrIdToProductIdMap));
+                }
+                
+
+            }
+        } catch (Exception e) {
+            System.debug('catch 1-->' + e.getLineNumber());
+            System.debug('catch 2 -->' + e.getCause());
+        }
+
+        if (!eSRDataList.isEmpty() && eSRDataList != null) {
+            esrRecList.addAll((List<OC_MD_ESR__c>) eSRDataList);
+            System.debug('data here-->' + JSON.serializePretty(esrRecList));
+        }
+
+        if (!esrRecList.isEmpty()) {
+            dmlResultESRList = Database.upsert(esrRecList, OC_MD_ESR__c.OC_MD_ConcatAccSAPIdProdReleaseProdRecId__c, false);
+
+            for (Integer i = 0; i < dmlResultESRList.size(); i++) {
+                if (!dmlResultESRList[i].isSuccess()) {
+                    System.debug('dml result of this -->' + JSON.serializePretty(dmlResultESRList));
+
+                    integEventLogEsr.add(new EventLog.integrationLog(OC_IB_Constants.logTypeError,
+                            OC_IB_Constants.classCSM_InboundRequestHandler, OC_IB_Constants.MethodprocessContractRequest,
+                            null, true, null, integrationIdentifier, null, false, true, true, false, false, null,
+                            String.valueOf(dmlResultESRList[i].getErrors()).substringBetween(OC_IB_Constants.getEventLogMessage, OC_IB_Constants.getStatusCode),
+                            false, null, null));
+
+                    System.debug('event log->' + JSON.serializePretty(integEventLogEsr));
+                }
+            }
+
+            if (integEventLogEsr != null) {
+                EventLog.createIntegrationLog(integEventLogEsr);
+            }
+        }
+    }
+}
