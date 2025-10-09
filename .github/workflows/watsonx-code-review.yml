@@ -9,10 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code (fetch 2 commits)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Get Changed Files
         id: files
