@@ -14,7 +14,7 @@ jobs:
         with:
           fetch-depth: 2
 
-       - name: Get Changed Files
+      - name: Get Changed Files
         id: files
         run: |
           echo "::set-output name=changed::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | tr '\n' ',')"
