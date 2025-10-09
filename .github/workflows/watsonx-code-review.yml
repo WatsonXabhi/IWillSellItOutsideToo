@@ -47,7 +47,7 @@ jobs:
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: 1
+          issue-number: ${{ github.event.issue.number }}
           body: |
             WatsonX Code Review Results:
             ```json
