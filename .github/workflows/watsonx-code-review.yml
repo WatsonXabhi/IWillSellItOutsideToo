@@ -43,7 +43,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
             
-         - name: Post WatsonX Review Comment
+      - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
