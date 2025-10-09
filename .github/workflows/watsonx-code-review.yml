@@ -47,7 +47,8 @@ jobs:
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: ${{ github.event.issue.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
             WatsonX Code Review Results:
             ```json
