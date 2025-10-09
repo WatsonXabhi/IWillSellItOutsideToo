@@ -33,12 +33,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: WatsonXabhi/IWillSellItOutsideToo
-          issue-number: ${{ github.event.issue.number }}
           body: |
             WatsonX Code Review Results:
             ```json
             $(cat review.json)
             ```
-          edit-mode: append
-          append-separator: newline
-          reactions-edit-mode: append
