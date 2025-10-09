@@ -29,6 +29,12 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
 
+      - name: Read WatsonX Review Output
+        id: read_review
+        run: |
+          CONTENT=$(cat review.json)
+          echo "review=$CONTENT" >> $GITHUB_OUTPUT
+
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
@@ -36,5 +42,5 @@ jobs:
           body: |
             WatsonX Code Review Results:
             ```
-            $(cat review.json)
+            ${{ steps.read_review.outputs.review }}
             ```
