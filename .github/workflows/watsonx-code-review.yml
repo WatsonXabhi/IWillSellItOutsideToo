@@ -47,7 +47,7 @@ jobs:
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          commit-hash: f15b3f5bce5f6326ef6dbd6886244f6c4214289b
+          issue-number: 1
           body: |
             WatsonX Code Review Results:
             ```json
