@@ -1,9 +1,8 @@
 name: WatsonX Code Review
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   watsonx-review:
@@ -15,19 +14,20 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Send Main Branch Diff to WatsonX
+       - name: Get Changed Files
+        id: files
+        run: |
+          echo "::set-output name=changed::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | tr '\n' ',')"
+      - name: Send PR Diff to WatsonX
         env:
           WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
-          # Diff between last two commits on main
-          DIFF=$(git diff HEAD~1 HEAD)
-          RESPONSE=$(curl -s -X POST \
+          DIFF=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          curl -X POST "$WATSONX_URL/v1/code-review" \
             -H "Authorization: Bearer $WATSONX_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" \
-            "$WATSONX_URL/v1/code-review")
-          echo "$RESPONSE" > review.json
+            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
 
       - name: Post Review to Fixed Issue
         uses: peter-evans/create-or-update-comment@v4
