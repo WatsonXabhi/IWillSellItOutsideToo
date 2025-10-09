@@ -29,14 +29,12 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
 
-      - name: Post Review to Fixed Issue
+      - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: WatsonXabhi/IWillSellItOutsideToo
-          issue-number: 1
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
-            💡 **WatsonX Code Review Results (main branch):**
+            WatsonX Code Review Results:
             ```
             $(cat review.json)
             ```
