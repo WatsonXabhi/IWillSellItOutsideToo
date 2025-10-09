@@ -49,7 +49,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: WatsonXabhi/IWillSellItOutsideToo
-          comment-id: 3385027583
+          issue-number: ${{ github.event.issue.number }}
           body: |
             WatsonX Code Review Results:
             ```json
