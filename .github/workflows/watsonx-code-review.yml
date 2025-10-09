@@ -25,7 +25,7 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout Code
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Get Changed Files
         id: files
@@ -38,17 +38,18 @@ jobs:
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
           DIFF=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
-          curl -X POST "$WATSONX_URL/v1/code-review" \
+          curl -X POST \
             -H "Authorization: Bearer $WATSONX_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
-            
+            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" \
+            "$WATSONX_URL/v1/code-review" > review.json
+
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             WatsonX Code Review Results:
-            ```
+            ```json
             $(cat review.json)
             ```
