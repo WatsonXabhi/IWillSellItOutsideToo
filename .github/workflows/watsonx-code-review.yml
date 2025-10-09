@@ -3,8 +3,6 @@ name: WatsonX Code Review
 on:
   push:
     branches: [ "main" ]
-  issue_comment:
-    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -15,30 +13,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Send PR Diff to WatsonX
-        id: watsonx
+      - name: Send Main Branch Diff to WatsonX
         env:
           WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
-          DIFF=$(git diff origin/main...HEAD)
+          # Diff between last two commits on main
+          DIFF=$(git diff HEAD~1 HEAD)
           RESPONSE=$(curl -s -X POST \
             -H "Authorization: Bearer $WATSONX_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" \
             "$WATSONX_URL/v1/code-review")
           echo "$RESPONSE" > review.json
-          echo "review_output<<EOF" >> $GITHUB_OUTPUT
-          echo "$RESPONSE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post WatsonX Review Comment
-        uses: peter-evans/create-or-update-comment@v4
+      - name: Upload Review Result as Artifact
+        uses: actions/upload-artifact@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: WatsonXabhi/IWillSellItOutsideToo
-          body: |
-            💡 **WatsonX Code Review Results**:
-            ```json
-            ${{ steps.watsonx.outputs.review_output }}
-            ```
+          name: watsonx-code-review-result
+          path: review.json
