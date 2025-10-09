@@ -1,0 +1,177 @@
+/**
+* @File Name          : OC_IB_IbaseInboundAssetReqProcessTest
+* @Description        : Test Class for
+*						OC_IB_IbaseInboundAssetRequestProcessor (Direct)
+*						OC_IB_DeserializeInboundRequest (Direct)
+*						OC_IB_InboundRequestHandler (Direct)
+*						OC_IB_ParseInboundReq (Direct)
+*						OC_IB_Utility (Direct)
+*						OC_IB_Constants (Direct)
+*
+* @Author             : IBM
+* @Group              : OmniChannel - Service
+* @Release            : R2010
+* @Created Date       : 10th September 2020
+* @Modification Log   : 
+*==============================================================================
+* Ver         Date                     Author                Modification
+*==============================================================================
+* 1.0        2020-09-10                 IBM                   Initial Version
+* 1.1        2021-02-15                 IBM                   Updated Version
+**/
+@isTest
+public class OC_IB_IbaseInboundAssetReqProcessTest {
+    @testsetup
+    static void setup(){
+        
+        Id integrationprofileId = [Select Id FROM Profile WHERE Name='Integration User profile'].Id;
+        List<User> testUserList = new List<User> ();
+        User testUser = (User)OC_TestDataGenerator.createSObject(new User());
+        
+        testUser.UserName = 'ericsson@test.com';
+        testUser.Email='integrationuser@invalid.com';
+        testUser.ProfileId = integrationprofileId;
+        insert testUser;
+        system.assertEquals(testUser.UserName,'ericsson@test.com');
+        
+        PermissionSet ps = [SELECT Id FROM PermissionSet WHERE Name ='Ericsson_Service_Integration'];
+        
+        insert new PermissionSetAssignment(AssigneeId = testUser.id, PermissionSetId = ps.Id);
+         System.runAs(testUser){   
+            OC_TestDataGenerator.insertCustomSettingsData();
+            OC_TestDataGenerator.insertIntegrationRecords();
+        }
+    }
+    static testMethod void testIbaseAssetReqProcessor() {
+        Test.startTest();
+        RestRequest req = new RestRequest(); 
+        req.requestURI = 'https://ericsson--omnic1.my.salesforce.com/services/apexrest/IbaseAsset/';
+        req.httpMethod = 'POST';
+        req.requestBody=Blob.valueof('[{"id":6539001,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"ERBS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":["1190376",""],"swPackage":"B1316R087F","contractNumbers": ["5090678","7893736"]}]');
+        RestContext.request = req;
+        OC_IB_IbaseInboundAssetRequestProcessor.handleInboundRequest();
+        System.enqueueJob(new OC_IB_DeserializeInboundRequest(req,OC_IB_Constants.Sfdc_Ebip_Ibase_InApi));
+        Test.stopTest();
+    }
+    
+    static testMethod void testIbaseAssetInvalidReq() {
+        Test.startTest();
+        RestRequest req = new RestRequest(); 
+        req.requestURI = 'https://ericsson--omnic1.my.salesforce.com/services/apexrest/IbaseAsset/';
+        req.httpMethod = 'POST';
+        req.requestBody=Blob.valueof('[{"id":6539001,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"ERBS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":["1190376",""],"swPackage":}]');
+        RestContext.request = req;
+        OC_IB_IbaseInboundAssetRequestProcessor.handleInboundRequest();
+        System.enqueueJob(new OC_IB_DeserializeInboundRequest(req,OC_IB_Constants.Sfdc_Ebip_Ibase_InApi));
+        OC_IB_InboundRequestHandler ocIbInboundObj = new OC_IB_InboundRequestHandler(null,OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);//U-7990
+        Test.stopTest();
+    }
+    
+    static testMethod void testIbaseAssetReqProcessorChainQueueable() {
+        List<Object> sobjRecJsonDataList=new List<Object>();
+        sobjRecJsonDataList=(List<Object>)JSON.deserializeUntyped('[{"id":6539001,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"ERBS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":["1190376",""],"swPackage":"B1316R087F"}]');
+        Test.startTest();
+        
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,sobjRecJsonDataList));
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_CSM_inApi,null)); //U-8030
+        
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest();
+        
+        
+    }
+    
+    //withSoldTo and ServiceTO
+    static testMethod void testPostWithSoldandService() {
+        List<Object> sobjRecJsonDataList=new List<Object>();
+        sobjRecJsonDataList=(List<Object>)JSON.deserializeUntyped('[{"id":6539001,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"ERBS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":["1190376"],"swPackage":"B1316R087F"}]');
+        Test.startTest();
+        
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,sobjRecJsonDataList));
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest();
+        
+    }
+    //with only SoldTO
+    static testMethod void testPostWithSoldTo() {
+        List<Object> sobjRecJsonDataList=new List<Object>();
+        sobjRecJsonDataList=(List<Object>)JSON.deserializeUntyped('[{"id":6539005,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"BTS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":null,"swPackage":"B1316R087F"}]');
+        Test.startTest();
+        
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,sobjRecJsonDataList));
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest();
+        
+    }
+    
+    //with Null SoldTo and ServiceTo
+    static testMethod void testPostNosoldtoServiceto() {
+        List<Object> sobjRecJsonDataList=new List<Object>();
+        sobjRecJsonDataList=(List<Object>)JSON.deserializeUntyped('[{"id":6539005,"name":"BSCRJ52-TA-1","detectionDate":1502878080000,"isActive":true,"oss":"be2uas1","type":"BTS","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":null,"serviceToIds":[],"swPackage":"B1316R087F"}]');
+        Test.startTest();
+        
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,sobjRecJsonDataList));
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest();
+        
+    }
+    //Testing exceptions by providing invalid product name which is type
+    static testMethod void testDMLExceptions() {
+        List<Object> sobjRecJsonDataList=new List<Object>();
+        sobjRecJsonDataList=(List<Object>)JSON.deserializeUntyped('[{"id":6539006,"name":"BSCRJ52-TA-1","detectionDate":"detection","isActive":true,"oss":"be2uas1","type":"AAAA","softwareVersion":"BTS G16B.11","softwareVersionShort":"L18.Q3","softwareRelease":"L16B.10-2","softwareLevel":null,"platform":"AXE","soldToId":507952,"serviceToIds":["1190376"],"swPackage":"B1316R087F","contractNumbers": ["5090678","7893736"]}]');
+        Test.startTest();
+        
+        System.enqueueJob(new OC_IB_ParseInboundReq(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,sobjRecJsonDataList));
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest();
+    }
+    static testMethod void SatgedtoActualObjectTesting() {
+        Test.startTest();
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_Ibase_InApi,null);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest(); 
+    }
+    
+    static testMethod void SatgedtoActualObjectCSMTest() {
+        Test.startTest();
+        Map<String, String> stateAndJobNameMap = new Map<String, String>();
+        stateAndJobNameMap.put('CSM12HourStagingToActual', 'CSM12HourStagingToActual');
+        OC_IB_BATCH_StagedDataProcessor batchInboundProcessor = new OC_IB_BATCH_StagedDataProcessor(OC_IB_Constants.Sfdc_Ebip_CSM_InApi,stateAndJobNameMap);// U-5499 added 'null'
+        Database.executeBatch(batchInboundProcessor);
+        Test.stopTest(); 
+    }
+    
+    //test method with decomission value to cover updateDecommission 
+    static testMethod void testUpdateDecommission() {
+        Asset objAsset = getAssetrecords('BSCRJ52-TA-5');
+        Set<String> csdpId = new Set<String>{objAsset.OC_IB_Csdp_Id__c};
+        Map<String, Date> mapCsdpIdSoldtoId = new Map<String, Date>{
+            objAsset.OC_IB_Csdp_Id__c + '+' + objAsset.Account.ParentId => Date.today()
+        };
+        Test.startTest();
+        OC_IB_StagedObjToActualObjMappingHandler.updateDecommission(csdpId, mapCsdpIdSoldtoId);
+        Test.stopTest();
+        Asset objAssetUpdated = getAssetrecords('BSCRJ52-TA-5');
+        system.assertEquals(false, objAssetUpdated.OC_IB_IsActive__c, 'Is active is not false');
+    }
+    //test method with only sold to & no service to to cover updateRemovedServiceToAsset
+    static testMethod void testUpdateRemovedServiceToAsset() {
+        Asset objAsset2 = getAssetrecords('BSCRJ52-TA-2');
+        Set<String> csdpsIds = new Set<String>{objAsset2.OC_IB_Csdp_Id__c};
+        List<String> csdpStagedList = new List<String>{'14347+1190367'};
+        Test.startTest();
+        OC_IB_StagedObjToActualObjMappingHandler.updateRemovedServiceToAsset(csdpsIds, csdpStagedList);
+        Test.stopTest();
+        Asset objAsset2Updated = getAssetrecords('BSCRJ52-TA-2');
+        system.assertEquals(false, objAsset2Updated.OC_IB_IsActive__c, 'Is active is not false');
+    }
+    //generic method with asset test data query
+    private static Asset getAssetrecords(String assetName){
+        return [SELECT id, Name, OC_IB_Csdp_Id__c,OC_IB_ConcatAssetIdSoldToId__c,Account.SAP_S2P_ID__c, OC_IB_ConcatAssetIdServiceToId__c,OC_IB_IsActive__c, OC_IB_DecommissionedDate__c, AccountId, Account.ParentId FROM Asset WHERE name = :assetName];
+    }
+}
