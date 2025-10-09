@@ -27,8 +27,14 @@ jobs:
             "$WATSONX_URL/v1/code-review")
           echo "$RESPONSE" > review.json
 
-      - name: Upload Review Result as Artifact
-        uses: actions/upload-artifact@v3
+      - name: Post Review to Fixed Issue
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          name: watsonx-code-review-result
-          path: review.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: WatsonXabhi/IWillSellItOutsideToo
+          issue-number: 1
+          body: |
+            💡 **WatsonX Code Review Results (main branch):**
+            ```json
+            ${{ steps.watsonx.outputs.review_output }}
+            ```
