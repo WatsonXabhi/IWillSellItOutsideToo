@@ -28,12 +28,17 @@ jobs:
       - name: Send PR Diff to WatsonX
         env:
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
+          PROJECT_ID: ${{ secrets.WATSONX_PROJECT_ID }}  # WatsonX project/deployment space ID
         run: |
           # Diff of the PR branch against base
           DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
 
-          # Construct JSON safely
-          JSON_PAYLOAD=$(jq -n --arg diff "$DIFF" --arg lang "apex" '{diff: $diff, language: $lang}')
+          # Construct JSON payload with project_id
+          JSON_PAYLOAD=$(jq -n \
+            --arg diff "$DIFF" \
+            --arg lang "apex" \
+            --arg project_id "$PROJECT_ID" \
+            '{diff: $diff, language: $lang, project_id: $project_id}')
 
           # Call WatsonX API
           curl -s -X POST \
