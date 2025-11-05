@@ -15,6 +15,17 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Get IBM Cloud IAM Token
+        env:
+          IBM_CLOUD_API_KEY: ${{ secrets.WATSONX_API_KEY }}  # Your IBM Cloud API key stored as secret
+        id: get_token
+        run: |
+          TOKEN_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=$IBM_CLOUD_API_KEY")
+          ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_ENV
+
       - name: Send Main Branch Diff to WatsonX
         env:
           WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
@@ -23,7 +34,7 @@ jobs:
           # Diff between last two commits on main
           DIFF=$(git diff HEAD~1 HEAD)
           RESPONSE=$(curl -s -X POST \
-            -H "Authorization: Bearer $WATSONX_API_KEY" \
+            -H "Authorization: Bearer $access_token" \
             -H "Content-Type: application/json" \
             -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" \
             "$WATSONX_URL/v1/code-review")
