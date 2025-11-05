@@ -16,7 +16,7 @@ jobs:
 
       - name: Get IBM Cloud IAM Token
         env:
-          IBM_CLOUD_API_KEY: ${{ secrets.WATSONX_API_KEY }}  # Your IBM Cloud API key stored as secret
+          IBM_CLOUD_API_KEY: ${{ secrets.WATSONX_API_KEY }}
         id: get_token
         run: |
           TOKEN_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
@@ -25,22 +25,27 @@ jobs:
           ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_ENV
 
-      - name: Send Main Branch Diff to WatsonX
+      - name: Send PR Diff to WatsonX
         env:
-          WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
         run: |
-          # Diff between last two commits on main
-          DIFF=$(git diff HEAD~1 HEAD)
-          RESPONSE=$(curl -s -X POST \
+          # Diff of the PR branch against base
+          DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
+
+          # Construct JSON safely
+          JSON_PAYLOAD=$(jq -n --arg diff "$DIFF" --arg lang "apex" '{diff: $diff, language: $lang}')
+
+          # Call WatsonX API
+          curl -s -X POST \
             -H "Authorization: Bearer $access_token" \
             -H "Content-Type: application/json" \
-            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
+            -d "$JSON_PAYLOAD" \
+            "$WATSONX_URL/v1/code-review" > review.json
 
       - name: Read WatsonX Review Output
         id: read_review
         run: |
-          CONTENT=$(cat review.json | sed ':a;N;$!ba;s/\n/\\n/g')  # flatten multiline JSON
+          CONTENT=$(jq -c . review.json)  # compact JSON for GitHub Actions output
           echo "review=$CONTENT" >> $GITHUB_OUTPUT
 
       - name: Post WatsonX Review Comment
@@ -48,7 +53,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            WatsonX Code Review Results:
+            💡 WatsonX Code Review Results:
             ```
             ${{ steps.read_review.outputs.review }}
             ```
