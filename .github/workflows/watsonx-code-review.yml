@@ -9,38 +9,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout code
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Get Changed Files
-        id: files
+      # Step 2: Get IBM Cloud IAM Token
+      - name: Get IBM Cloud IAM Token
+        env:
+          IBM_CLOUD_API_KEY: ${{ secrets.WATSONX_API_KEY }}
+        id: get_token
         run: |
-          echo "::set-output name=changed::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | tr '\n' ',')"
+          TOKEN_RESPONSE=$(curl -s -X POST "https://iam.cloud.ibm.com/identity/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=$IBM_CLOUD_API_KEY")
+          ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      # Step 3: Send PR Diff to WatsonX Chat API
       - name: Send PR Diff to WatsonX
         env:
-          WATSONX_API_KEY: ${{ secrets.WATSONX_API_KEY }}
           WATSONX_URL: ${{ secrets.WATSONX_URL }}
+          PROJECT_ID: ${{ secrets.WATSONX_PROJECT_ID }}
         run: |
-          DIFF=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
-          curl -X POST "$WATSONX_URL/v1/code-review" \
-            -H "Authorization: Bearer $WATSONX_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"diff\": \"$DIFF\", \"language\": \"apex\"}" > review.json
+          # Diff of PR branch vs base branch
+          DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
 
+          # Construct JSON payload for WatsonX Text/Chat API
+          JSON_PAYLOAD=$(jq -n \
+            --arg model "ibm/granite-3-3-8b-instruct" \
+            --arg project_id "$PROJECT_ID" \
+            --arg diff "$DIFF" \
+            '{
+              model: $model,
+              project_id: $project_id,
+              messages: [
+                {
+                  role: "user",
+                  content: ("Please review the following Apex/LWC code for best practices and return JSON:\n\n" + $diff)
+                }
+              ]
+            }')
+
+          # Call WatsonX Text/Chat API
+          curl -s -X POST \
+            -H "Authorization: Bearer $access_token" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD" \
+            "$WATSONX_URL/v1/text/chat" > review.json
+
+      # Step 4: Read WatsonX review output
       - name: Read WatsonX Review Output
         id: read_review
         run: |
-          CONTENT=$(cat review.json | sed ':a;N;$!ba;s/\n/\\n/g')  # flatten multiline JSON
+          CONTENT=$(jq -c . review.json)  # compact JSON for GitHub Actions
           echo "review=$CONTENT" >> $GITHUB_OUTPUT
 
+      # Step 5: Post review as a PR comment
       - name: Post WatsonX Review Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            WatsonX Code Review Results:
+            💡 **WatsonX Code Review Results:**
             ```
             ${{ steps.read_review.outputs.review }}
             ```

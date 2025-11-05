@@ -18,7 +18,7 @@ public class SampleApexClass {
         // Issue 6: Looping through a large dataset without batch processing
         for (Lead l : leads) {
             // Issue 7: Updating a field without checking for null values
-            l.Description = 'Updated description';
+            l.Description = 'Updated description 1';
             update l;
         }
     }
